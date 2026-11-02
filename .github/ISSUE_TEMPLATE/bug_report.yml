@@ -1,0 +1,66 @@
+name: Bug report
+description: Report a reproducible CredFlow problem
+title: "[Bug]: "
+labels: []
+body:
+  - type: markdown
+    attributes:
+      value: |
+        CredFlow is a development project. Use synthetic data only. Do not include card numbers, bank details, friend/customer information, Supabase secrets, tokens, or other private data. For security vulnerabilities, follow SECURITY.md instead of opening a public issue.
+  - type: textarea
+    id: summary
+    attributes:
+      label: What happened?
+      description: Describe the problem clearly.
+    validations:
+      required: true
+  - type: textarea
+    id: reproduce
+    attributes:
+      label: Steps to reproduce
+      description: Use non-sensitive sample data only.
+      placeholder: |
+        1. Open ...
+        2. Enter synthetic values ...
+        3. Observe ...
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behavior
+    validations:
+      required: true
+  - type: dropdown
+    id: area
+    attributes:
+      label: Area
+      options:
+        - Overview dashboard
+        - Personal cards
+        - FuelRotator
+        - Supabase data flow
+        - Responsive UI
+        - Build / development setup
+        - Other
+    validations:
+      required: true
+  - type: input
+    id: environment
+    attributes:
+      label: Browser / operating system
+      placeholder: e.g. Chrome on Windows 11
+  - type: textarea
+    id: evidence
+    attributes:
+      label: Sanitized evidence
+      description: Optional screenshots or logs with all sensitive values removed.
+  - type: checkboxes
+    id: safety
+    attributes:
+      label: Safety confirmation
+      options:
+        - label: I removed real card, bank, customer/friend, credential, token, and secret information.
+          required: true
+        - label: This is not a security vulnerability report.
+          required: true
