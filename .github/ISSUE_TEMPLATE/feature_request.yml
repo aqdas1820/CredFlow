@@ -1,0 +1,55 @@
+name: Feature request
+description: Suggest an improvement for CredFlow
+title: "[Feature]: "
+labels: []
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Describe the user problem first. CredFlow is a development project; do not include real card, bank, customer/friend, payment, credential, or secret information.
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem to solve
+      description: What workflow is difficult or missing?
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed solution
+      description: Describe the smallest useful improvement.
+    validations:
+      required: true
+  - type: dropdown
+    id: area
+    attributes:
+      label: Product area
+      options:
+        - Overview dashboard
+        - Personal cards
+        - FuelRotator
+        - Reporting / analytics
+        - Data model / Supabase
+        - Responsive UI
+        - Developer experience
+        - Other
+    validations:
+      required: true
+  - type: textarea
+    id: benefit
+    attributes:
+      label: Expected benefit
+      description: Who benefits and how should success be evaluated?
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives considered
+      description: Optional.
+  - type: checkboxes
+    id: scope
+    attributes:
+      label: Scope confirmation
+      options:
+        - label: This request uses no real financial/customer data and does not assume banking integration or production financial processing.
+          required: true
