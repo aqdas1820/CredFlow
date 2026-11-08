@@ -70,6 +70,15 @@ NEXT_PUBLIC_SUPABASE_ANON_KEY
 
 Do not commit service-role keys, private credentials or production secrets.
 
+When these variables are missing or malformed, CredFlow now shows a setup-required screen
+instead of attempting to initialize Supabase and crashing. Use a valid `http://` or
+`https://` Supabase URL and the browser-safe anon key. The presence of a URL and
+key does **not** verify connectivity, authentication, or row-level security.
+
+**Manual smoke check:** Start the app without the variables and confirm the
+setup-required screen appears; then configure a development Supabase project
+and confirm the normal dashboard loads. Never use production data for smoke tests.
+
 The current UI reads/writes the following Supabase tables:
 
 ```text

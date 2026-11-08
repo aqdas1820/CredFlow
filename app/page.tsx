@@ -16,10 +16,25 @@ import {
   Wallet
 } from "lucide-react";
 
-// Initialize Supabase Client
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || "";
-const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || "";
-const supabase = createClient(supabaseUrl, supabaseKey);
+// The public Supabase configuration is optional during local setup and CI builds.
+// Avoid throwing during module initialization when the environment is incomplete.
+function initializeSupabase() {
+  const url = process.env.NEXT_PUBLIC_SUPABASE_URL?.trim();
+  const key = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY?.trim();
+
+  if (!url || !key) return null;
+
+  try {
+    const parsed = new URL(url);
+    if (parsed.protocol !== "https:" && parsed.protocol !== "http:") return null;
+    return createClient(url, key);
+  } catch {
+    // Invalid URL or client configuration: render setup guidance instead of crashing.
+    return null;
+  }
+}
+
+const supabase = initializeSupabase();
 
 export default function CredFlowApp() {
   const [activeTab, setActiveTab] = useState("overview");
@@ -52,6 +67,10 @@ export default function CredFlowApp() {
 
   // Fetch Data from Supabase
   const fetchData = async () => {
+    if (!supabase) {
+      setLoading(false);
+      return;
+    }
     setLoading(true);
     try {
       const { data: pCards } = await supabase.from("personal_cards").select("*");
@@ -87,6 +106,7 @@ export default function CredFlowApp() {
   // Handlers for Inserts
   const handleAddPersonalCard = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!supabase) return;
     await supabase.from("personal_cards").insert([
       { card_name: pCardName, total_limit: Number(pLimit), statement_date: Number(pStatement), due_date: Number(pDue), utilized_amount: 0 }
     ]);
@@ -97,6 +117,7 @@ export default function CredFlowApp() {
 
   const handleAddFuelCard = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!supabase) return;
     await supabase.from("fuel_cards").insert([
       { friend_name: fFriendName, card_bank: fBank, total_limit: Number(fLimit), due_date: Number(fDue) }
     ]);
@@ -107,6 +128,7 @@ export default function CredFlowApp() {
 
   const handleRecordSwipe = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!supabase) return;
     const gross = Number(swipeGross);
     const feePct = Number(swipeFeePercent);
     const net = gross - (gross * feePct) / 100;
@@ -127,9 +149,30 @@ export default function CredFlowApp() {
   };
 
   const markSwipeSettled = async (id: string) => {
+    if (!supabase) return;
     await supabase.from("fuel_swipes").update({ status: "Settled" }).eq("id", id);
     fetchData();
   };
+
+  if (!supabase) {
+    return (
+      <main className="min-h-screen bg-[#09090B] text-gray-100 flex items-center justify-center p-6">
+        <section role="status" className="w-full max-w-xl rounded-2xl border border-amber-500/30 bg-gray-900 p-8 space-y-4">
+          <h1 className="text-2xl font-bold text-white">CredFlow setup required</h1>
+          <p className="text-gray-300">
+            A valid Supabase project URL and public anon key are required to load the dashboard.
+            No financial records have been loaded.
+          </p>
+          <p className="text-gray-300">Set these variables in your local <code>.env.local</code> file or deployment environment:</p>
+          <pre className="overflow-x-auto rounded-lg bg-gray-950 p-4 text-sm text-cyan-300">{"NEXT_PUBLIC_SUPABASE_URL=...\nNEXT_PUBLIC_SUPABASE_ANON_KEY=..."}</pre>
+          <p className="text-sm text-amber-200">
+            Only use the public anon key in browser code. Never expose Supabase service-role keys.
+            Restart your development server after updating the configuration.
+          </p>
+        </section>
+      </main>
+    );
+  }
 
   return (
     <div className="flex h-screen bg-[#09090B] text-gray-100 font-sans overflow-hidden">
@@ -174,7 +217,7 @@ export default function CredFlowApp() {
 
         <div className="p-4 rounded-xl bg-gray-900/50 border border-gray-800 text-xs text-gray-400">
           <p className="font-semibold text-gray-300">Secure Vault</p>
-          <p className="mt-1">Cloud Database Live Sync Active</p>
+          <p className="mt-1">Cloud database configured; sync not verified</p>
         </div>
       </aside>
 
