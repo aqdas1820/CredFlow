@@ -39,6 +39,9 @@ const supabase = initializeSupabase();
 export default function CredFlowApp() {
   const [activeTab, setActiveTab] = useState("overview");
   const [loading, setLoading] = useState(true);
+  const [fetchError, setFetchError] = useState<string | null>(null);
+  const [mutationError, setMutationError] = useState<string | null>(null);
+  const [saving, setSaving] = useState(false);
 
   // Data States
   const [personalCards, setPersonalCards] = useState<any[]>([]);
@@ -73,15 +76,19 @@ export default function CredFlowApp() {
     }
     setLoading(true);
     try {
-      const { data: pCards } = await supabase.from("personal_cards").select("*");
-      const { data: fCards } = await supabase.from("fuel_cards").select("*");
-      const { data: fSwipes } = await supabase.from("fuel_swipes").select("*, fuel_cards(friend_name, card_bank)");
+      const { data: pCards, error: pError } = await supabase.from("personal_cards").select("*");
+      const { data: fCards, error: fError } = await supabase.from("fuel_cards").select("*");
+      const { data: fSwipes, error: sError } = await supabase.from("fuel_swipes").select("*, fuel_cards(friend_name, card_bank)");
 
-      if (pCards) setPersonalCards(pCards);
-      if (fCards) setFuelCards(fCards);
-      if (fSwipes) setFuelSwipes(fSwipes);
-    } catch (err) {
-      console.error("Error fetching data:", err);
+      if (pError || fError || sError) {
+        throw new Error("A database query failed");
+      }
+      setPersonalCards(pCards ?? []);
+      setFuelCards(fCards ?? []);
+      setFuelSwipes(fSwipes ?? []);
+      setFetchError(null);
+    } catch {
+      setFetchError("Unable to load the latest records. Check your connection and permissions, then try refreshing.");
     } finally {
       setLoading(false);
     }
@@ -103,27 +110,57 @@ export default function CredFlowApp() {
   const totalCommissionPaid = fuelSwipes
     .reduce((acc, s) => acc + (Number(s.gross_amount) - Number(s.net_amount)), 0);
 
-  // Handlers for Inserts
+  // A rejected database write must not close the form or erase the user's entries.
+  const persistChange = async (
+    write: () => Promise<void>,
+    onSuccess: () => void,
+  ) => {
+    if (saving) return;
+    setSaving(true);
+    setMutationError(null);
+    try {
+      await write();
+      onSuccess();
+      await fetchData();
+    } catch {
+      setMutationError("Changes could not be saved. Please try again; your form entries have been kept.");
+    } finally {
+      setSaving(false);
+    }
+  };
+
   const handleAddPersonalCard = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!supabase) return;
-    await supabase.from("personal_cards").insert([
-      { card_name: pCardName, total_limit: Number(pLimit), statement_date: Number(pStatement), due_date: Number(pDue), utilized_amount: 0 }
-    ]);
-    setShowAddPersonalModal(false);
-    setPCardName(""); setPLimit(""); setPStatement(""); setPDue("");
-    fetchData();
+    await persistChange(
+      async () => {
+        const { error } = await supabase.from("personal_cards").insert([
+          { card_name: pCardName, total_limit: Number(pLimit), statement_date: Number(pStatement), due_date: Number(pDue), utilized_amount: 0 }
+        ]);
+        if (error) throw error;
+      },
+      () => {
+        setShowAddPersonalModal(false);
+        setPCardName(""); setPLimit(""); setPStatement(""); setPDue("");
+      },
+    );
   };
 
   const handleAddFuelCard = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!supabase) return;
-    await supabase.from("fuel_cards").insert([
-      { friend_name: fFriendName, card_bank: fBank, total_limit: Number(fLimit), due_date: Number(fDue) }
-    ]);
-    setShowAddFuelCardModal(false);
-    setFFriendName(""); setFBank(""); setFLimit(""); setFDue("");
-    fetchData();
+    await persistChange(
+      async () => {
+        const { error } = await supabase.from("fuel_cards").insert([
+          { friend_name: fFriendName, card_bank: fBank, total_limit: Number(fLimit), due_date: Number(fDue) }
+        ]);
+        if (error) throw error;
+      },
+      () => {
+        setShowAddFuelCardModal(false);
+        setFFriendName(""); setFBank(""); setFLimit(""); setFDue("");
+      },
+    );
   };
 
   const handleRecordSwipe = async (e: React.FormEvent) => {
@@ -132,26 +169,39 @@ export default function CredFlowApp() {
     const gross = Number(swipeGross);
     const feePct = Number(swipeFeePercent);
     const net = gross - (gross * feePct) / 100;
-
-    await supabase.from("fuel_swipes").insert([
-      {
-        fuel_card_id: selectedFuelCardId,
-        gross_amount: gross,
-        fee_percent: feePct,
-        net_amount: net,
-        swipe_date: new Date().toISOString().split("T")[0],
-        status: "Pending"
-      }
-    ]);
-    setShowSwipeModal(false);
-    setSwipeGross("");
-    fetchData();
+    await persistChange(
+      async () => {
+        const { error } = await supabase.from("fuel_swipes").insert([
+          {
+            fuel_card_id: selectedFuelCardId,
+            gross_amount: gross,
+            fee_percent: feePct,
+            net_amount: net,
+            swipe_date: new Date().toISOString().split("T")[0],
+            status: "Pending"
+          }
+        ]);
+        if (error) throw error;
+      },
+      () => {
+        setShowSwipeModal(false);
+        setSwipeGross("");
+      },
+    );
   };
 
   const markSwipeSettled = async (id: string) => {
     if (!supabase) return;
-    await supabase.from("fuel_swipes").update({ status: "Settled" }).eq("id", id);
-    fetchData();
+    await persistChange(
+      async () => {
+        const { data, error } = await supabase.from("fuel_swipes")
+          .update({ status: "Settled" })
+          .eq("id", id)
+          .select("id");
+        if (error || !data?.length) throw new Error("Swipe settlement was not saved");
+      },
+      () => {},
+    );
   };
 
   if (!supabase) {
@@ -223,6 +273,12 @@ export default function CredFlowApp() {
 
       {/* MAIN CONTENT AREA */}
       <main className="flex-1 overflow-y-auto p-8 lg:p-12">
+        {fetchError && (
+          <p role="alert" className="mb-5 rounded-xl border border-red-500/30 bg-red-500/10 p-4 text-sm text-red-200">{fetchError}</p>
+        )}
+        {mutationError && !showAddPersonalModal && !showAddFuelCardModal && !showSwipeModal && (
+          <p role="alert" className="mb-5 rounded-xl border border-red-500/30 bg-red-500/10 p-4 text-sm text-red-200">{mutationError}</p>
+        )}
         {loading ? (
           <div className="flex h-full items-center justify-center">
             <p className="text-cyan-400 font-medium animate-pulse text-lg">Loading CredFlow System...</p>
@@ -393,6 +449,7 @@ export default function CredFlowApp() {
                               {swipe.status === "Pending" && (
                                 <button
                                   onClick={() => markSwipeSettled(swipe.id)}
+                                  disabled={saving}
                                   className="text-xs bg-gray-800 hover:bg-gray-700 text-cyan-400 border border-gray-700 px-3 py-1.5 rounded-lg transition"
                                 >
                                   Mark Paid
@@ -420,6 +477,9 @@ export default function CredFlowApp() {
               <button onClick={() => setShowAddPersonalModal(false)} className="text-gray-400 hover:text-white"><X size={20} /></button>
             </div>
             <form onSubmit={handleAddPersonalCard} className="space-y-4">
+              {mutationError && (
+                <p role="alert" className="rounded-lg border border-red-500/30 bg-red-500/10 p-3 text-sm text-red-200">{mutationError}</p>
+              )}
               <div>
                 <label className="text-xs text-gray-400 block mb-1">Card Name / Bank</label>
                 <input type="text" required value={pCardName} onChange={(e) => setPCardName(e.target.value)} className="w-full bg-gray-950 border border-gray-800 rounded-xl p-3 text-white focus:border-cyan-500 outline-none" placeholder="e.g. HDFC Regalia" />
@@ -438,7 +498,7 @@ export default function CredFlowApp() {
                   <input type="number" required min="1" max="31" value={pDue} onChange={(e) => setPDue(e.target.value)} className="w-full bg-gray-950 border border-gray-800 rounded-xl p-3 text-white focus:border-cyan-500 outline-none" placeholder="5" />
                 </div>
               </div>
-              <button type="submit" className="w-full bg-cyan-500 hover:bg-cyan-400 text-gray-950 font-semibold p-3 rounded-xl transition">Save Card</button>
+              <button type="submit" disabled={saving} className="w-full bg-cyan-500 hover:bg-cyan-400 text-gray-950 font-semibold p-3 rounded-xl transition disabled:opacity-50 disabled:cursor-not-allowed">{saving ? "Saving..." : "Save Card"}</button>
             </form>
           </div>
         </div>
@@ -452,6 +512,9 @@ export default function CredFlowApp() {
               <button onClick={() => setShowAddFuelCardModal(false)} className="text-gray-400 hover:text-white"><X size={20} /></button>
             </div>
             <form onSubmit={handleAddFuelCard} className="space-y-4">
+              {mutationError && (
+                <p role="alert" className="rounded-lg border border-red-500/30 bg-red-500/10 p-3 text-sm text-red-200">{mutationError}</p>
+              )}
               <div>
                 <label className="text-xs text-gray-400 block mb-1">Friend's Name</label>
                 <input type="text" required value={fFriendName} onChange={(e) => setFFriendName(e.target.value)} className="w-full bg-gray-950 border border-gray-800 rounded-xl p-3 text-white focus:border-cyan-500 outline-none" placeholder="Nadeem" />
@@ -468,7 +531,7 @@ export default function CredFlowApp() {
                 <label className="text-xs text-gray-400 block mb-1">Due Date (1-31)</label>
                 <input type="number" required min="1" max="31" value={fDue} onChange={(e) => setFDue(e.target.value)} className="w-full bg-gray-950 border border-gray-800 rounded-xl p-3 text-white focus:border-cyan-500 outline-none" placeholder="10" />
               </div>
-              <button type="submit" className="w-full bg-cyan-500 hover:bg-cyan-400 text-gray-950 font-semibold p-3 rounded-xl transition">Save Friend Card</button>
+              <button type="submit" disabled={saving} className="w-full bg-cyan-500 hover:bg-cyan-400 text-gray-950 font-semibold p-3 rounded-xl transition disabled:opacity-50 disabled:cursor-not-allowed">{saving ? "Saving..." : "Save Friend Card"}</button>
             </form>
           </div>
         </div>
@@ -482,6 +545,9 @@ export default function CredFlowApp() {
               <button onClick={() => setShowSwipeModal(false)} className="text-gray-400 hover:text-white"><X size={20} /></button>
             </div>
             <form onSubmit={handleRecordSwipe} className="space-y-4">
+              {mutationError && (
+                <p role="alert" className="rounded-lg border border-red-500/30 bg-red-500/10 p-3 text-sm text-red-200">{mutationError}</p>
+              )}
               <div>
                 <label className="text-xs text-gray-400 block mb-1">Select Friend's Card</label>
                 <select required value={selectedFuelCardId} onChange={(e) => setSelectedFuelCardId(e.target.value)} className="w-full bg-gray-950 border border-gray-800 rounded-xl p-3 text-white focus:border-cyan-500 outline-none">
@@ -505,7 +571,7 @@ export default function CredFlowApp() {
                   <p className="text-gray-400">Agent Commission Lost: <span className="text-orange-400 font-bold">₹{(Number(swipeGross) * Number(swipeFeePercent)) / 100}</span></p>
                 </div>
               )}
-              <button type="submit" className="w-full bg-cyan-500 hover:bg-cyan-400 text-gray-950 font-semibold p-3 rounded-xl transition">Record Swipe</button>
+              <button type="submit" disabled={saving} className="w-full bg-cyan-500 hover:bg-cyan-400 text-gray-950 font-semibold p-3 rounded-xl transition disabled:opacity-50 disabled:cursor-not-allowed">{saving ? "Saving..." : "Record Swipe"}</button>
             </form>
           </div>
         </div>
