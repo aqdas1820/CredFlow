@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { createClient } from "@supabase/supabase-js";
+import { calculateSwipeAmounts } from "../lib/money.mjs";
 import {
   LayoutDashboard,
   CreditCard,
@@ -98,6 +99,8 @@ export default function CredFlowApp() {
     fetchData();
   }, []);
 
+  const swipePreview = calculateSwipeAmounts(Number(swipeGross), Number(swipeFeePercent));
+
   // Calculations for FuelRotator
   const totalOwedToFriends = fuelSwipes
     .filter(s => s.status === "Pending")
@@ -166,17 +169,20 @@ export default function CredFlowApp() {
   const handleRecordSwipe = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!supabase) return;
-    const gross = Number(swipeGross);
+    const amounts = calculateSwipeAmounts(Number(swipeGross), Number(swipeFeePercent));
+    if (!amounts) {
+      setMutationError("Enter an amount in rupees and paise and a fee between 0% and 100%.");
+      return;
+    }
     const feePct = Number(swipeFeePercent);
-    const net = gross - (gross * feePct) / 100;
     await persistChange(
       async () => {
         const { error } = await supabase.from("fuel_swipes").insert([
           {
             fuel_card_id: selectedFuelCardId,
-            gross_amount: gross,
+            gross_amount: amounts.gross,
             fee_percent: feePct,
-            net_amount: net,
+            net_amount: amounts.net,
             swipe_date: new Date().toISOString().split("T")[0],
             status: "Pending"
           }
@@ -559,16 +565,16 @@ export default function CredFlowApp() {
               </div>
               <div>
                 <label className="text-xs text-gray-400 block mb-1">Gross Swiped Amount (₹)</label>
-                <input type="number" required value={swipeGross} onChange={(e) => setSwipeGross(e.target.value)} className="w-full bg-gray-950 border border-gray-800 rounded-xl p-3 text-white focus:border-cyan-500 outline-none" placeholder="50000" />
+                <input type="number" required min="0.01" step="0.01" value={swipeGross} onChange={(e) => setSwipeGross(e.target.value)} className="w-full bg-gray-950 border border-gray-800 rounded-xl p-3 text-white focus:border-cyan-500 outline-none" placeholder="50000" />
               </div>
               <div>
                 <label className="text-xs text-gray-400 block mb-1">Agent Fee (%)</label>
-                <input type="number" step="0.1" required value={swipeFeePercent} onChange={(e) => setSwipeFeePercent(e.target.value)} className="w-full bg-gray-950 border border-gray-800 rounded-xl p-3 text-white focus:border-cyan-500 outline-none" placeholder="1.5" />
+                <input type="number" step="0.01" min="0" max="100" required value={swipeFeePercent} onChange={(e) => setSwipeFeePercent(e.target.value)} className="w-full bg-gray-950 border border-gray-800 rounded-xl p-3 text-white focus:border-cyan-500 outline-none" placeholder="1.5" />
               </div>
-              {swipeGross && (
+              {swipePreview && (
                 <div className="p-3 rounded-xl bg-gray-950 border border-gray-800 text-xs space-y-1">
-                  <p className="text-gray-400">Net Cash You Get: <span className="text-cyan-400 font-bold">₹{Number(swipeGross) - (Number(swipeGross) * Number(swipeFeePercent)) / 100}</span></p>
-                  <p className="text-gray-400">Agent Commission Lost: <span className="text-orange-400 font-bold">₹{(Number(swipeGross) * Number(swipeFeePercent)) / 100}</span></p>
+                  <p className="text-gray-400">Net Cash You Get: <span className="text-cyan-400 font-bold">₹{swipePreview.net.toFixed(2)}</span></p>
+                  <p className="text-gray-400">Agent Commission Lost: <span className="text-orange-400 font-bold">₹{swipePreview.fee.toFixed(2)}</span></p>
                 </div>
               )}
               <button type="submit" disabled={saving} className="w-full bg-cyan-500 hover:bg-cyan-400 text-gray-950 font-semibold p-3 rounded-xl transition disabled:opacity-50 disabled:cursor-not-allowed">{saving ? "Saving..." : "Record Swipe"}</button>
