@@ -164,7 +164,7 @@ export default function CredFlowApp() {
             No financial records have been loaded.
           </p>
           <p className="text-gray-300">Set these variables in your local <code>.env.local</code> file or deployment environment:</p>
-          <pre className="overflow-x-auto rounded-lg bg-gray-950 p-4 text-sm text-cyan-300">{"NEXT_PUBLIC_SUPABASE_URL=...\\nNEXT_PUBLIC_SUPABASE_ANON_KEY=..."}</pre>
+          <pre className="overflow-x-auto rounded-lg bg-gray-950 p-4 text-sm text-cyan-300">{"NEXT_PUBLIC_SUPABASE_URL=...\nNEXT_PUBLIC_SUPABASE_ANON_KEY=..."}</pre>
           <p className="text-sm text-amber-200">
             Only use the public anon key in browser code. Never expose Supabase service-role keys.
             Restart your development server after updating the configuration.
