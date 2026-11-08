@@ -89,6 +89,17 @@ fuel_swipes
 
 Database schema, access policies and production deployment settings should be reviewed before using this project beyond development/testing.
 
+## Currency calculation
+
+Fuel swipe amounts are entered in rupees with at most two decimal places.
+The hypothetical fee is calculated on integer paise and rounded **once** to the
+nearest paise (half-up); the displayed net and commission use the same result
+that is submitted to the database. Invalid amounts and fee rates outside
+0–100% are rejected. This only applies to newly recorded swipes; it does not
+retroactively change prior records.
+
+Run the dependency-free regression tests with `npm test` (Node.js 20+).
+
 ## Project status
 
 CredFlow is currently a **public development project**. The repository does not claim production-readiness, financial-advice functionality or banking integration.
